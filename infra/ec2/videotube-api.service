@@ -1,0 +1,17 @@
+# /etc/systemd/system/videotube-api.service
+# Mantiene FastAPI en ejecución y la reinicia si falla o si la EC2 se reinicia.
+# setup_ec2.sh reemplaza __APP_USER__ y __APP_DIR__ (ubuntu → /home/ubuntu/videotube).
+[Unit]
+Description=VideoTube API (FastAPI + Uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__APP_USER__
+WorkingDirectory=__APP_DIR__/backend
+ExecStart=__APP_DIR__/backend/venv/bin/uvicorn src.main:app --host 127.0.0.1 --port 8000 --workers 2 --proxy-headers
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

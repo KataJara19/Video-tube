@@ -1,0 +1,14 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VideoTubeMediaReadWrite",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      "Resource": [
+        "arn:aws:s3:::NOMBRE-BUCKET-VIDEOS/*",
+        "arn:aws:s3:::NOMBRE-BUCKET-MINIATURAS/*"
+      ]
+    }
+  ]
+}

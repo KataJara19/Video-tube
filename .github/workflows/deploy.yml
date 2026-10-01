@@ -1,0 +1,222 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# VideoTube · Proyecto 1 · CI/CD hacia AWS
+#
+#   Pull Request a main  → validar backend + frontend (NO despliega)
+#   Push / merge a main  → validar → OIDC → IAM Role → desplegar (+ migración de RDS) → verificar
+#   workflow_dispatch    → igual que un push a main (despliegue manual)
+#   Si todavía no existe la variable AWS_ROLE_ARN, el push solo valida y NO despliega.
+#
+# Repositorio: KataJara19/Video-tube (PROYECTO 1)
+#
+# Sin Access Keys permanentes: GitHub obtiene credenciales TEMPORALES de AWS
+# asumiendo un IAM Role mediante OpenID Connect (OIDC).
+#
+# Variables del repositorio (Settings → Secrets and variables → Actions → Variables):
+#   AWS_ROLE_ARN        arn:aws:iam::<ACCOUNT_ID>:role/GitHubDeployRole
+#   AWS_REGION          us-east-1
+#   S3_FRONTEND_BUCKET  nombre del bucket de la SPA
+#   EC2_INSTANCE_ID     i-0123456789abcdef0
+#   EC2_APP_DIR         carpeta del repositorio en la EC2 (ej. /home/ubuntu/videotube)
+#   EC2_USER            usuario de la EC2 dueño de esa carpeta (ubuntu en Ubuntu, ec2-user en Amazon Linux)
+#   VITE_API_URL        URL pública de FastAPI usada al compilar React (ej. http://<IP-ELASTICA>)
+#   API_URL             URL pública de FastAPI para la verificación (normalmente = VITE_API_URL)
+#   FRONTEND_URL        URL del website del bucket frontend
+# ─────────────────────────────────────────────────────────────────────────────
+name: CI/CD VideoTube
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Mínimo privilegio: leer el código y pedir el token OIDC
+permissions:
+  contents: read
+  id-token: write
+
+# Un solo despliegue a la vez por rama; en PR se cancela la ejecución anterior
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ── 1. Validación del backend (FastAPI + PostgreSQL) ──────────────────────
+  backend-ci:
+    name: Backend · lint y pruebas
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      # PostgreSQL real para las pruebas (misma tecnología que RDS)
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: videotube_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/videotube_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11" # misma versión que la EC2 (Amazon Linux 2023)
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Análisis estático (ruff)
+        run: ruff check src tests
+
+      - name: Pruebas (pytest)
+        run: pytest
+
+  # ── 2. Validación del frontend (React + Vite) ─────────────────────────────
+  frontend-ci:
+    name: Frontend · lint y build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias (npm ci)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build de producción
+        run: npm run build
+        env:
+          # La URL de la API queda incrustada en el build de Vite
+          VITE_API_URL: ${{ vars.VITE_API_URL || 'http://localhost:8000' }}
+
+      - name: Guardar dist/ para el despliegue
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  # ── 3. Despliegue (solo push a main o ejecución manual) ───────────────────
+  deploy:
+    name: Desplegar en AWS
+    needs: [backend-ci, frontend-ci]
+    # Solo despliega en main y cuando AWS ya está configurado (existe la variable AWS_ROLE_ARN).
+    # Mientras no exista, el push solo valida y este job aparece como "skipped" (no como error).
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Autenticación GitHub → AWS (OIDC, credenciales temporales)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: videotube-deploy-${{ github.run_id }}
+
+      - name: Descargar dist/
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+
+      - name: Frontend → S3 (solo el contenido de dist/)
+        run: |
+          # Archivos con hash en el nombre: caché larga
+          aws s3 sync dist/ "s3://${{ vars.S3_FRONTEND_BUCKET }}" --delete \
+            --exclude index.html --cache-control "public,max-age=31536000,immutable"
+          # index.html sin caché para que cada despliegue se vea de inmediato
+          aws s3 cp dist/index.html "s3://${{ vars.S3_FRONTEND_BUCKET }}/index.html" \
+            --cache-control "no-cache" --content-type "text/html"
+
+      - name: Backend → EC2 (AWS Systems Manager, sin SSH)
+        env:
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          APP_DIR: ${{ vars.EC2_APP_DIR || '/home/ubuntu/videotube' }}
+          APP_USER: ${{ vars.EC2_USER || 'ubuntu' }}
+          SHA: ${{ github.sha }}
+        run: |
+          # Comandos que ejecuta la EC2: actualizar código, dependencias y reiniciar la API
+          PARAMS=$(jq -n --arg dir "$APP_DIR" --arg sha "$SHA" --arg user "$APP_USER" '{commands: [
+            "set -e",
+            "cd \($dir)",
+            "sudo -u \($user) git fetch --depth 1 origin \($sha)",
+            "sudo -u \($user) git reset --hard FETCH_HEAD",
+            "sudo -u \($user) backend/venv/bin/pip install -q -r backend/requirements.txt",
+            "sudo -u \($user) bash infra/ec2/run_migrations.sh",
+            "systemctl restart videotube-api",
+            "sleep 3",
+            "curl -fsS http://127.0.0.1:8000/health"
+          ]}')
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy VideoTube ${SHA::7}" \
+            --parameters "$PARAMS" \
+            --query "Command.CommandId" --output text)
+          echo "SSM CommandId: $COMMAND_ID"
+
+          # Espera el resultado; si el comando falla, el job falla
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
+          STATUS=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --query "Status" --output text)
+          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --query "[StandardOutputContent, StandardErrorContent]" --output text
+          echo "Estado: $STATUS"
+          test "$STATUS" = "Success"
+
+  # ── 4. Comprobación posterior al despliegue ───────────────────────────────
+  verify:
+    name: Verificar despliegue
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: API /health y /docs
+        run: |
+          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "${{ vars.API_URL }}/health"
+          curl -fsS -o /dev/null --retry 5 --retry-delay 5 --retry-all-errors "${{ vars.API_URL }}/docs"
+          echo "FastAPI responde correctamente"
+
+      - name: Archivos en S3 (videos y miniaturas)
+        run: |
+          # En AWS la API debe guardar lo que se sube desde el frontend en los buckets S3
+          HEALTH=$(curl -fsS "${{ vars.API_URL }}/health")
+          echo "$HEALTH"
+          echo "$HEALTH" | jq -e '.storage == "s3" and (.buckets.videos | length > 0) and (.buckets.thumbnails | length > 0)'
+
+      - name: Endpoints de la versión actual
+        run: |
+          # Shorts, suscripciones, notificaciones, reacciones y comentarios con respuestas
+          SPEC=$(curl -fsS "${{ vars.API_URL }}/openapi.json")
+          for path in "/videos" "/videos/{video_id}/reaction" "/users/{channel_id}/subscribe" "/me/feed" "/notifications" "/comments/{comment_id}/replies"; do
+            echo "$SPEC" | jq -e --arg p "$path" '.paths | has($p)' > /dev/null || { echo "Falta $path"; exit 1; }
+            echo "OK $path"
+          done
+          curl -fsS "${{ vars.API_URL }}/videos?short=true&limit=1" > /dev/null
+
+      - name: SPA en S3
+        run: |
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors "${{ vars.FRONTEND_URL }}" | grep -q '<div id="root">'
+          echo "Frontend publicado correctamente"

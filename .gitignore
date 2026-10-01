@@ -1,0 +1,16 @@
+# Credenciales y configuración local: NUNCA al repositorio
+.env
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+.pytest_cache/
+.ruff_cache/
+backend/uploads/
+
+# Node / Vite
+node_modules/
+frontend/dist/

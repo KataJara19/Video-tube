@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GitHubActionsOIDC",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": [
+            "repo:USUARIO_GITHUB@ID_DUENO/NOMBRE_REPO@ID_REPO:ref:refs/heads/main",
+            "repo:USUARIO_GITHUB/NOMBRE_REPO:ref:refs/heads/main"
+          ]
+        }
+      }
+    }
+  ]
+}

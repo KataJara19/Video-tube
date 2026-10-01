@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/* Tokens del tema claro. Cambiar aquí afecta a toda la aplicación. */
+@theme {
+  --font-sans: "Roboto", "Arial", sans-serif;
+
+  --color-ink: #0f0f0f;          /* texto principal */
+  --color-muted: #606060;        /* texto secundario (canal, vistas, fecha) */
+  --color-soft: #f2f2f2;         /* chips, hover, caja de descripción */
+  --color-soft-strong: #e5e5e5;  /* hover sobre soft */
+  --color-line: #e5e5e5;         /* bordes y separadores */
+  --color-field: #f8f8f8;        /* botón del buscador */
+  --color-link: #065fd4;         /* enlaces y foco */
+  --color-brand: #e8453c;        /* color propio de la plataforma */
+  --color-brand-dark: #c9352d;
+  --color-page: #ffffff;         /* fondo de la página (barra superior, guía, contenido) */
+  --color-surface: #ffffff;      /* tarjetas, menús, ventanas y campos */
+  --color-icon-active: #0f0f0f;  /* icono de la sección activa en la guía */
+  --color-banner-1: #ffe1dc;     /* degradado del banner del perfil */
+  --color-banner-2: #ffd9b8;
+  --color-banner-3: #f9d7ec;
+}
+
+/*
+ * Temas de color (botón de paleta en la barra superior).
+ * Cada tema solo cambia los tokens de arriba: fondo, superficies, bordes, texto,
+ * enlaces, botones, logo e iconos activos combinan automáticamente.
+ */
+:root[data-theme='rosa'] {
+  --color-page: #fff5f9;
+  --color-surface: #ffffff;
+  --color-soft: #fde6ef;
+  --color-soft-strong: #f9cfe0;
+  --color-line: #f5d6e3;
+  --color-field: #fff0f6;
+  --color-ink: #3d0f25;
+  --color-muted: #8c4f6b;
+  --color-link: #d6336c;
+  --color-brand: #e64980;
+  --color-brand-dark: #c2255c;
+  --color-icon-active: #e64980;
+  --color-banner-1: #ffd3e5;
+  --color-banner-2: #fde4f0;
+  --color-banner-3: #f1dcff;
+}
+:root[data-theme='morado'] {
+  --color-page: #faf6ff;
+  --color-surface: #ffffff;
+  --color-soft: #efe5fd;
+  --color-soft-strong: #e1d0fb;
+  --color-line: #e8dcf9;
+  --color-field: #f6effe;
+  --color-ink: #261342;
+  --color-muted: #6c5a88;
+  --color-link: #7c3aed;
+  --color-brand: #8b5cf6;
+  --color-brand-dark: #6d28d9;
+  --color-icon-active: #8b5cf6;
+  --color-banner-1: #e6d9ff;
+  --color-banner-2: #f2e8ff;
+  --color-banner-3: #dcd8ff;
+}
+:root[data-theme='azul'] {
+  --color-page: #f4f8ff;
+  --color-surface: #ffffff;
+  --color-soft: #e2edfc;
+  --color-soft-strong: #cddff8;
+  --color-line: #d9e6f7;
+  --color-field: #eef5ff;
+  --color-ink: #0e2442;
+  --color-muted: #50657f;
+  --color-link: #1d6fd8;
+  --color-brand: #2f7de1;
+  --color-brand-dark: #1c5fb8;
+  --color-icon-active: #2f7de1;
+  --color-banner-1: #d6e7ff;
+  --color-banner-2: #e6f1ff;
+  --color-banner-3: #d3f0fb;
+}
+:root[data-theme='menta'] {
+  --color-page: #f3fbf7;
+  --color-surface: #ffffff;
+  --color-soft: #dcf3e8;
+  --color-soft-strong: #c5ead8;
+  --color-line: #d3ede0;
+  --color-field: #ecf8f2;
+  --color-ink: #0c2a1f;
+  --color-muted: #4b6b5e;
+  --color-link: #0f8a5f;
+  --color-brand: #12a36f;
+  --color-brand-dark: #0c7b53;
+  --color-icon-active: #12a36f;
+  --color-banner-1: #d2f4e4;
+  --color-banner-2: #e4f8ef;
+  --color-banner-3: #d4f1f4;
+}
+:root[data-theme='durazno'] {
+  --color-page: #fff8f2;
+  --color-surface: #ffffff;
+  --color-soft: #fde9da;
+  --color-soft-strong: #fad6bd;
+  --color-line: #f6dfcd;
+  --color-field: #fff3ea;
+  --color-ink: #3a1a08;
+  --color-muted: #8a5d42;
+  --color-link: #d9601c;
+  --color-brand: #f07a32;
+  --color-brand-dark: #c95f1f;
+  --color-icon-active: #f07a32;
+  --color-banner-1: #ffdcc6;
+  --color-banner-2: #ffeadb;
+  --color-banner-3: #ffd9d0;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-page font-sans text-ink antialiased;
+    transition: background-color 0.2s;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+  }
+}
