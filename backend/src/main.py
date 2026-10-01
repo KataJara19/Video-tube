@@ -29,7 +29,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="VideoTube API",
     description="API de la plataforma de videos: React (S3) · FastAPI (EC2) · PostgreSQL (RDS) · S3",
-    version="1.0.0",
+    version="1.1.0",
     lifespan=lifespan,
 )
 
